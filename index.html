@@ -58,11 +58,7 @@
     z-index: 100;
   }
 
-  .sidebar-brand {
-    padding: 18px 16px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-
+  .sidebar-brand { padding: 18px 16px 14px; border-bottom: 1px solid var(--border); }
   .sidebar-brand h1 { font-size: 14px; font-weight: 600; color: var(--primary); line-height: 1.3; }
   .sidebar-brand p { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
   .sidebar-user { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
@@ -155,7 +151,6 @@
   
   .merit-btn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 10px; }
   
-  /* Sub-tab styling untuk Merit Demerit */
   .sub-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
   .sub-tab { padding: 10px 16px; cursor: pointer; font-weight: 500; color: var(--text-secondary); border-bottom: 3px solid transparent; }
   .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -176,14 +171,15 @@
       <button class="auth-tab" onclick="switchAuthTab('pelajar')">Pelajar</button>
     </div>
     <div id="auth-pensyarah-form">
-      <div class="form-group"><label>E-mel</label><input type="email" id="auth-email" value="hanifffaizal@gmail.com"/></div>
-      <div class="form-group"><label>Kata Laluan</label><input type="password" id="auth-password" value="790704025409"/></div>
+      <div class="form-group"><label>E-mel Pensyarah</label><input type="email" id="auth-email" placeholder="Masukkan e-mel berdaftar"/></div>
+      <div class="form-group"><label>Kata Laluan</label><input type="password" id="auth-password" placeholder="Masukkan kata laluan"/></div>
     </div>
     <div id="auth-pelajar-form" class="hidden">
-      <div class="form-group"><label>Nombor Kad Pengenalan</label><input type="text" id="auth-nokp" placeholder="cth: 030924080985"/></div>
+      <div class="form-group"><label>Nombor Kad Pengenalan Pelajar</label><input type="text" id="auth-nokp" placeholder="cth: 030924080985"/></div>
     </div>
     <div id="auth-error" class="alert alert-danger hidden"><span>⚠</span><span id="auth-error-msg">Maklumat tidak sah</span></div>
-    <button class="btn btn-primary btn-block" onclick="doLogin()">Log Masuk</button>
+    <div id="auth-loading" style="display:none; text-align:center; font-size:12px; color:var(--primary); margin:8px 0;">Menghubungkan ke server Google Sheets...</div>
+    <button class="btn btn-primary btn-block" onclick="doLogin()">Log Masuk Selamat</button>
   </div>
 </div>
 
@@ -204,25 +200,12 @@
 <div id="notification-bar" style="display:none" class="notification"></div>
 
 <script>
-// URL API Makro Google Apps Script Induk (Kemas Kini Jun 2026)
+// Pautan Kekunci API Google Apps Script Deployment Aktif Anda
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxudOo_cl0mBKtY3GQrCEITD1Dfv1Zv5x7wYyUOcfEdmGQUD3iie0arlSyebgJ6PLm0/exec';
-
-const PENSYARAH_DATA = [
-  {email:"hanifffaizal@gmail.com", password:"790704025409", nama:"HANIFF FAIZAL", role:"pensyarah"},
-  {email:"admin@ipgm.edu.my", password:"30521", nama:"ADMIN PENTADBIR", role:"admin"}
-];
-
-const RAW_PELAJAR = `MPU2082_032,ABDUL HADI BIN MOHD DARUS,030924080985,2025182410001,PIMK,L
-MPU2082_001,ABDURAHIM FAIZ BIN MAKHTARUDIN,010114030523,2025182390001,PBKK,L
-MPU2082_002,MOHAMMAD AMMAR BIN MOHD RADZI,970329095103,20251823900010,PBKK,L`;
-
-const PELAJAR_LIST = RAW_PELAJAR.trim().split('\n').map(line => {
-  const [bil, nama, nokp, agiliran, kelas, jantina] = line.split(',');
-  return { bil, nama, nokp, agiliran, kelas, jantina };
-});
 
 let currentUser = null, currentRole = null, currentScreen = null, currentPelajar = null;
 let markahDB = {}, biodataDB = {}, activeMeritTab = 'Individu';
+let pelajarDBList = []; // Senarai Pelajar Dimuat Turun Secara Dinamik dari Google Sheets
 
 async function callGAS(action, payload = {}) {
   try {
@@ -248,23 +231,61 @@ function switchAuthTab(tab) {
   document.querySelectorAll('.auth-tab').forEach((t, i) => t.classList.toggle('active', (i===0 && tab==='pensyarah') || (i===1 && tab==='pelajar')));
 }
 
+// PROSES PENGESAHAN: Data disemak terus ke Sheets di bahagian server backend (Tiada data sulit dalam HTML)
 async function doLogin() {
   const isP = !document.getElementById('auth-pensyarah-form').classList.contains('hidden');
-  if (isP) {
-    currentUser = { nama: "HANIFF FAIZAL", role: "pensyarah" }; currentRole = 'pensyarah';
-  } else {
-    const nokp = document.getElementById('auth-nokp').value.trim();
-    const pelajar = PELAJAR_LIST.find(p => p.nokp === nokp);
-    if (!pelajar) { document.getElementById('auth-error').classList.remove('hidden'); return; }
-    currentUser = pelajar; currentRole = 'pelajar'; currentPelajar = pelajar;
-  }
-  document.getElementById('screen-auth').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
+  let payload = {};
   
+  if (isP) {
+    payload = {
+      type: 'pensyarah',
+      email: document.getElementById('auth-email').value.trim(),
+      password: document.getElementById('auth-password').value.trim()
+    };
+  } else {
+    payload = {
+      type: 'pelajar',
+      nokp: document.getElementById('auth-nokp').value.trim()
+    };
+  }
+  
+  if((isP && (!payload.email || !payload.password)) || (!isP && !payload.nokp)) {
+    alert("Sila isi maklumat yang diperlukan."); return;
+  }
+  
+  document.getElementById('auth-error').classList.add('hidden');
+  document.getElementById('auth-loading').style.display = 'block';
+  
+  const res = await callGASPost('login', payload);
+  document.getElementById('auth-loading').style.display = 'none';
+  
+  if (res && res.ok) {
+    currentUser = res.user;
+    currentRole = res.type;
+    if (currentRole === 'pelajar') currentPelajar = res.user;
+    
+    // Muat turun data dinamik pelajar serta-merta dari Google Sheets
+    await loadAllDataFromServer();
+    
+    document.getElementById('screen-auth').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    
+    if (currentRole === 'pensyarah') buildSidebarPensyarah(); else buildSidebarPelajar();
+  } else {
+    document.getElementById('auth-error-msg').textContent = res ? res.error : "Ralat sambungan pangkalan data.";
+    document.getElementById('auth-error').classList.remove('hidden');
+  }
+}
+
+async function loadAllDataFromServer() {
+  const pRes = await callGAS('getPelajarList');
+  if (pRes && pRes.ok) {
+    pelajarDBList = pRes.data;
+  } else {
+    console.error("Gagal mendapatkan senarai pelajar");
+  }
   const mRes = await callGAS('getAllMarkah'); if (mRes?.ok) mRes.data.forEach(m => markahDB[m.nokp] = m);
   const bRes = await callGAS('getAllBiodata'); if (bRes?.ok) bRes.data.forEach(b => biodataDB[b.nokp] = b);
-  
-  if (currentRole === 'pensyarah') buildSidebarPensyarah(); else buildSidebarPelajar();
 }
 
 function doLogout() { location.reload(); }
@@ -310,20 +331,20 @@ function notify(msg, type = 'success') {
 function renderDashboard() {
   document.getElementById('main-content').innerHTML = `
     <div class="grid-3">
-      <div class="stat-card"><div class="label">Jumlah Pelajar</div><div class="value">${PELAJAR_LIST.length}</div></div>
+      <div class="stat-card"><div class="label">Jumlah Pelajar Aktif (Live)</div><div class="value">${pelajarDBList.length}</div></div>
       <div class="stat-card"><div class="label">Siri Kursus</div><div class="value">MPU2082</div></div>
-      <div class="stat-card"><div class="label">Tahun</div><div class="value">2026</div></div>
+      <div class="stat-card"><div class="label">Tahun Pentaksiran</div><div class="value">2026</div></div>
     </div><br>
     <div class="card">
-      <div class="card-title">Selamat Datang ke Sistem Pentaksiran Bersepadu</div>
-      <p class="text-secondary">Sistem pengiraan wajaran komponen Pentaksiran Berterusan (PB) dan Merit Demerit Perkhemahan.</p>
+      <div class="card-title">Selamat Datang ke Sistem Pentaksiran Bersepadu IPG</div>
+      <p class="text-secondary">Sistem pengiraan wajaran komponen Pentaksiran Berterusan (PB) dan rekod Merit Demerit Perkhemahan masa nyata.</p>
     </div>`;
 }
 
 function renderMarkahEntry() {
   document.getElementById('main-content').innerHTML = `
     <div class="card">
-      <div class="card-header"><div class="card-title">Kemasukan Markah Mentah PB (Pensyarah Masukkan 0-100)</div>
+      <div class="card-header"><div class="card-title">Kemasukan Markah Mentah PB (0-100)</div>
       <button class="btn btn-success btn-sm" onclick="saveAllMarkah()">Simpan Semua Markah</button></div>
       <div class="table-wrap">
         <table>
@@ -335,7 +356,7 @@ function renderMarkahEntry() {
       </div>
     </div>`;
 
-  document.getElementById('markah-tbody').innerHTML = PELAJAR_LIST.map(p => {
+  document.getElementById('markah-tbody').innerHTML = pelajarDBList.map(p => {
     const m = markahDB[p.nokp] || {};
     const k = parseFloat(m.kuiz)||0; const h4 = parseFloat(m.hp4)||0; const h5 = parseFloat(m.hp5)||0; const h3 = parseFloat(m.hp3)||0; const h8 = parseFloat(m.hp8)||0;
     const totalWajaran = (k*0.1) + (h4*0.3) + (h5*0.3) + (h3*0.15) + (h8*0.15);
@@ -351,7 +372,7 @@ function renderMarkahEntry() {
       <td><span id="gred-${p.nokp}" class="gred-B">—</span></td>
     </tr>`;
   }).join('');
-  PELAJAR_LIST.forEach(p => liveCalcWajaran(p.nokp));
+  pelajarDBList.forEach(p => liveCalcWajaran(p.nokp));
 }
 
 function liveCalcWajaran(nokp) {
@@ -368,7 +389,7 @@ async function saveAllMarkah() {
   document.querySelectorAll('.mark-input').forEach(i => {
     let exist = rows.find(r => r.nokp === i.dataset.nokp);
     if(!exist) {
-      const p = PELAJAR_LIST.find(x => x.nokp === i.dataset.nokp);
+      const p = pelajarDBList.find(x => x.nokp === i.dataset.nokp);
       exist = { nokp: i.dataset.nokp, nama: p.nama, kelas: p.kelas, agiliran: p.agiliran, kuiz: null, hp4: null, hp5: null, hp3: null, hp8: null };
       rows.push(exist);
     }
@@ -378,9 +399,6 @@ async function saveAllMarkah() {
   if(res?.ok) notify('Semua markah mentah dan pengiraan wajaran induk berjaya disimpan!');
 }
 
-// ================================================================
-// SISTEM MERIT DEMERIT BERKUMPULAN & INDIVIDU
-// ================================================================
 function renderMeritDemerit() {
   document.getElementById('main-content').innerHTML = `
     <div class="sub-tabs">
@@ -406,9 +424,7 @@ function renderMeritDemerit() {
           </select>
         </div>
       </div>
-      <div id="action-merit-individu" class="hidden">
-        ${renderIndividuButtonsHtml()}
-      </div>
+      <div id="action-merit-individu" class="hidden">${renderIndividuButtonsHtml()}</div>
     </div>
 
     <div id="panel-merit-kumpulan" class="${activeMeritTab==='Kumpulan'?'':'hidden'}">
@@ -432,17 +448,14 @@ function renderMeritDemerit() {
       </div>
       
       <div class="card hidden" id="preview-ahli-kumpulan-box">
-        <div class="card-title" style="color: var(--primary);">Senarai Ahli Kumpulan Aktif (Mata Merit/Demerit akan diagihkan kepada SEMUA ahli di bawah):</div>
+        <div class="card-title" style="color: var(--primary);">Senarai Ahli Kumpulan Aktif:</div>
         <div id="container-ahli-chips" style="margin-top: 8px;"></div>
       </div>
-
-      <div id="action-merit-kumpulan" class="hidden">
-        ${renderKumpulanButtonsHtml()}
-      </div>
+      <div id="action-merit-kumpulan" class="hidden">${renderKumpulanButtonsHtml()}</div>
     </div>
 
     <div class="card hidden" id="box-merit-history-log">
-      <div class="card-title">Paparan Log Merit Demerit Semasa (Diambil Real-Time dari Google Sheets)</div>
+      <div class="card-title">Paparan Log Merit Demerit Semasa (Google Sheets)</div>
       <div style="margin: 8px 0; font-weight: bold;" id="text-score-summary">Jumlah Skor Pelajar: 0 Mata</div>
       <div class="table-wrap">
         <table>
@@ -460,7 +473,6 @@ function switchMeritView(type) {
   document.getElementById('panel-merit-kumpulan').classList.toggle('hidden', type !== 'Kumpulan');
   document.getElementById('st-individu').classList.toggle('active', type === 'Individu');
   document.getElementById('st-kumpulan').classList.toggle('active', type === 'Kumpulan');
-  
   document.getElementById('box-merit-history-log').classList.add('hidden');
   document.getElementById('action-merit-individu').classList.add('hidden');
   document.getElementById('action-merit-kumpulan').classList.add('hidden');
@@ -472,7 +484,7 @@ function filterStudentByClass() {
   const select = document.getElementById('sel-nama-individu');
   if(!cls) { select.innerHTML = '<option value="">— Sila Pilih Kelas Dahulu —</option>'; return; }
   
-  const filtered = PELAJAR_LIST.filter(p => p.kelas === cls);
+  const filtered = pelajarDBList.filter(p => p.kelas === cls);
   select.innerHTML = '<option value="">— Sila Pilih Pelajar —</option>' + filtered.map(p => `<option value="${p.nokp}">${p.nama}</option>`).join('');
 }
 
@@ -493,18 +505,15 @@ async function loadStudentIndividualMerit() {
 function filterGroupByKumpulan() {
   const cls = document.getElementById('sel-kelas-kumpulan').value;
   const grp = document.getElementById('sel-no-kumpulan').value;
-  
   if(!cls || !grp) {
     document.getElementById('preview-ahli-kumpulan-box').classList.add('hidden');
     document.getElementById('action-merit-kumpulan').classList.add('hidden');
     return;
   }
-  
-  const matchingStudents = PELAJAR_LIST.filter(p => {
+  const matchingStudents = pelajarDBList.filter(p => {
     const bio = biodataDB[p.nokp] || {};
     return p.kelas === cls && bio.kumpulan === grp;
   });
-  
   const container = document.getElementById('container-ahli-chips');
   if(matchingStudents.length === 0) {
     container.innerHTML = '<span style="color: var(--danger); font-size:13px;">⚠ Tiada ahli ditemui dalam pangkalan data untuk kelas & kumpulan ini. Pastikan pelajar telah melengkapkan nombor kumpulan di profil mereka.</span>';
@@ -522,36 +531,26 @@ function renderHistoryTable(data) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Tiada sebarang rekod ditemui pada lembaran akaun pelajar ini.</td></tr>`;
     return;
   }
-  tbody.innerHTML = data.map(d => `
-    <tr>
-      <td><small>${d.timestamp}</small></td>
-      <td>${d.kategori}</td>
-      <td><span class="badge ${d.jenis==='Merit'?'badge-green':'badge-red'}">${d.jenis}</span></td>
-      <td>${d.perkara}</td>
-      <td><b>${d.mata > 0 ? '+' + d.mata : d.mata}</b></td>
-    </tr>`).join('');
+  tbody.innerHTML = data.map(d => `<tr><td><small>${d.timestamp}</small></td><td>${d.kategori}</td><td><span class="badge ${d.jenis==='Merit'?'badge-green':'badge-red'}">${d.jenis}</span></td><td>${d.perkara}</td><td><b>${d.mata > 0 ? '+' + d.mata : d.mata}</b></td></tr>`).join('');
 }
 
 async function processAddMeritAction(modul, kategori, jenis, perkara, mata) {
   if (modul === 'Individu') {
     const nokp = document.getElementById('sel-nama-individu').value;
-    const p = PELAJAR_LIST.find(x => x.nokp === nokp);
+    const p = pelajarDBList.find(x => x.nokp === nokp);
     const payload = { nokp: p.nokp, nama: p.nama, kelas: p.kelas, modul, kategori, jenis, perkara, mata, oleh: currentUser.nama };
     const res = await callGASPost('saveMeritItem', payload);
     if(res?.ok) { notify('Catatan Merit Individu Berjaya Disimpan!'); loadStudentIndividualMerit(); }
   } else {
     const cls = document.getElementById('sel-kelas-kumpulan').value;
     const grp = document.getElementById('sel-no-kumpulan').value;
-    const matchingStudents = PELAJAR_LIST.filter(p => {
+    const matchingStudents = pelajarDBList.filter(p => {
       const bio = biodataDB[p.nokp] || {};
       return p.kelas === cls && bio.kumpulan === grp;
     });
-    
     if(matchingStudents.length === 0) { alert('Tiada ahli kumpulan aktif untuk dihantar.'); return; }
-    
     const records = matchingStudents.map(p => ({ nokp: p.nokp, nama: p.nama, kelas: p.kelas }));
     const payload = { isBatch: true, records: records, modul, kategori, jenis, perkara, mata, oleh: currentUser.nama };
-    
     const res = await callGASPost('saveMeritItem', payload);
     if(res?.ok) { notify('Merit/Demerit Kumpulan Berjaya Diagihkan Kepada Semua Ahli Sekaligus!'); filterGroupByKumpulan(); }
   }
@@ -576,10 +575,8 @@ function submitCustomMeritForm() {
   const jenis = document.getElementById('modal-jenis').value;
   const perkara = document.getElementById('modal-perkara').value.trim();
   let mata = parseFloat(document.getElementById('modal-mata').value);
-  
   if(!perkara || isNaN(mata)) { alert('Sila isi maklumat perkara and mata dengan betul.'); return; }
   if(jenis === 'Demerit' && mata > 0) mata = -Math.abs(mata);
-  
   closeModal();
   processAddMeritAction(modul, 'Input Pensyarah Khas', jenis, perkara, mata);
 }
@@ -632,11 +629,9 @@ function renderLaporan() {
       <div class="card-title">Ringkasan Laporan Markah PB & Gred Pelajar MPU2082</div>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr><th>Nama Pelajar</th><th>Kelas</th><th>Kuiz (10%)</th><th>HPK2 (60%)</th><th>HPK3 (30%)</th><th>Skor Akhir (100%)</th><th>Gred Akhir</th></tr>
-          </thead>
+          <thead><tr><th>Nama Pelajar</th><th>Kelas</th><th>Kuiz (10%)</th><th>HPK2 (60%)</th><th>HPK3 (30%)</th><th>Skor Akhir (100%)</th><th>Gred Akhir</th></tr></thead>
           <tbody>
-            ${PELAJAR_LIST.map(p => {
+            ${pelajarDBList.map(p => {
               const m = markahDB[p.nokp] || {};
               const k = parseFloat(m.kuiz)||0; const h4 = parseFloat(m.hp4)||0; const h5 = parseFloat(m.hp5)||0; const h3 = parseFloat(m.hp3)||0; const h8 = parseFloat(m.hp8)||0;
               const total = (k * 0.1) + (h4 * 0.3) + (h5 * 0.3) + (h3 * 0.15) + (h8 * 0.15);
@@ -664,7 +659,7 @@ async function renderPelajarProfile() {
   if(res?.ok && res.data.length > 0) {
     document.getElementById('pelajar-merit-tbody').innerHTML = res.data.map(d => `<tr><td>${d.timestamp}</td><td>${d.modul}</td><td>${d.kategori}</td><td>${d.jenis}</td><td>${d.perkara}</td><td><b>${d.mata}</b></td></tr>`).join('');
   } else {
-    document.getElementById('pelajar-merit-tbody').innerHTML = `<tr><td colspan="6" class="text-center text-muted">Tiada sebarang rekod ditemui.</td></tr>`;
+    document.getElementById('pelajar-merit-tbody').innerHTML = `<tr><td colspan="6" class="text-center text-muted">Tiada sebarang rekod demerit/merit ditemui.</td></tr>`;
   }
 }
 function closeModal() { document.getElementById('modal-container').innerHTML = ''; }
