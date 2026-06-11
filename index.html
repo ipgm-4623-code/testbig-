@@ -179,7 +179,7 @@
     </div>
     <div id="auth-error" class="alert alert-danger hidden"><span>⚠</span><span id="auth-error-msg">Maklumat tidak sah</span></div>
     <div id="auth-loading" style="display:none; text-align:center; font-size:12px; color:var(--primary); margin:8px 0;">Menghubungkan ke server Google Sheets...</div>
-    <button class="btn btn-primary btn-block" onclick="doLogin()">Log Masuk Selamat</button>
+    <button class="btn btn-primary btn-block" onclick="doLogin()">Log Masuk Bersepadu</button>
   </div>
 </div>
 
@@ -200,14 +200,13 @@
 <div id="notification-bar" style="display:none" class="notification"></div>
 
 <script>
-// Pautan API Google Apps Script Deployment Aktif Anda
+// Pautan Kekunci API Google Apps Script Deployment Aktif Anda
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxudOo_cl0mBKtY3GQrCEITD1Dfv1Zv5x7wYyUOcfEdmGQUD3iie0arlSyebgJ6PLm0/exec';
 
 let currentUser = null, currentRole = null, currentScreen = null, currentPelajar = null;
 let markahDB = {}, biodataDB = {}, activeMeritTab = 'Individu';
-let pelajarDBList = []; 
+let pelajarDBList = []; // Array dinamik memuat turun senarai pelajar penuh dari Google Sheets
 
-// Fungsi GET kalis ralat CORS
 async function callGAS(action, payload = {}) {
   try {
     const params = new URLSearchParams({ action, payload: JSON.stringify(payload) });
@@ -216,7 +215,6 @@ async function callGAS(action, payload = {}) {
   } catch (e) { console.error("GET Error:", e); return null; }
 }
 
-// KEMAS KINI STRUKTUR: Menggunakan JSON Plain Text untuk melepasi preflight OPTIONS check (CORS Kalis Sekat)
 async function callGASPost(action, payload = {}) {
   try {
     const resp = await fetch(GAS_URL, {
@@ -269,6 +267,7 @@ async function doLogin() {
     currentRole = res.type;
     if (currentRole === 'pelajar') currentPelajar = res.user;
     
+    // Tarik senarai penuh data masa nyata dari Sheet Induk
     await loadAllDataFromServer();
     
     document.getElementById('screen-auth').classList.add('hidden');
