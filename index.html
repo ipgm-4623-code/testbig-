@@ -171,14 +171,14 @@
       <button class="auth-tab" onclick="switchAuthTab('pelajar')">Pelajar</button>
     </div>
     <div id="auth-pensyarah-form">
-      <div class="form-group"><label>E-mel Pensyarah</label><input type="email" id="auth-email" placeholder="Masukkan e-mel berdaftar"/></div>
-      <div class="form-group"><label>Kata Laluan</label><input type="password" id="auth-password" placeholder="Masukkan kata laluan"/></div>
+      <div class="form-group"><label>E-mel Pensyarah</label><input type="email" id="auth-email" placeholder="Sila taip e-mel pensyarah"/></div>
+      <div class="form-group"><label>Kata Laluan</label><input type="password" id="auth-password" placeholder="Sila taip kata laluan"/></div>
     </div>
     <div id="auth-pelajar-form" class="hidden">
       <div class="form-group"><label>Nombor Kad Pengenalan Pelajar</label><input type="text" id="auth-nokp" placeholder="cth: 030924080985"/></div>
     </div>
     <div id="auth-error" class="alert alert-danger hidden"><span>⚠</span><span id="auth-error-msg">Maklumat tidak sah</span></div>
-    <div id="auth-loading" style="display:none; text-align:center; font-size:12px; color:var(--primary); margin:8px 0;">Menghubungkan ke server Google Sheets...</div>
+    <div id="auth-loading" style="display:none; text-align:center; font-size:12px; color:var(--primary); margin:8px 0;">Menghubungkan ke pangkalan data Google Sheets...</div>
     <button class="btn btn-primary btn-block" onclick="doLogin()">Log Masuk Selamat</button>
   </div>
 </div>
@@ -200,12 +200,12 @@
 <div id="notification-bar" style="display:none" class="notification"></div>
 
 <script>
-// Pautan Kekunci API Google Apps Script Deployment Aktif Anda
+// Pautan Kekunci API Google Apps Script Deployment Aktif Anda (Jun 2026)
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxudOo_cl0mBKtY3GQrCEITD1Dfv1Zv5x7wYyUOcfEdmGQUD3iie0arlSyebgJ6PLm0/exec';
 
 let currentUser = null, currentRole = null, currentScreen = null, currentPelajar = null;
 let markahDB = {}, biodataDB = {}, activeMeritTab = 'Individu';
-let pelajarDBList = []; // Senarai Pelajar Dimuat Turun Secara Dinamik dari Google Sheets
+let pelajarDBList = []; // Array dinamik memuat turun senarai pelajar penuh dari Google Sheets
 
 async function callGAS(action, payload = {}) {
   try {
@@ -231,7 +231,7 @@ function switchAuthTab(tab) {
   document.querySelectorAll('.auth-tab').forEach((t, i) => t.classList.toggle('active', (i===0 && tab==='pensyarah') || (i===1 && tab==='pelajar')));
 }
 
-// PROSES PENGESAHAN: Data disemak terus ke Sheets di bahagian server backend (Tiada data sulit dalam HTML)
+// PROSES PENGESAHAN: Data disemak terus ke Sheets di server backend (Tiada lagi pencerobohan keselamatan)
 async function doLogin() {
   const isP = !document.getElementById('auth-pensyarah-form').classList.contains('hidden');
   let payload = {};
@@ -250,7 +250,7 @@ async function doLogin() {
   }
   
   if((isP && (!payload.email || !payload.password)) || (!isP && !payload.nokp)) {
-    alert("Sila isi maklumat yang diperlukan."); return;
+    alert("Sila isi ruang kosong."); return;
   }
   
   document.getElementById('auth-error').classList.add('hidden');
@@ -279,11 +279,8 @@ async function doLogin() {
 
 async function loadAllDataFromServer() {
   const pRes = await callGAS('getPelajarList');
-  if (pRes && pRes.ok) {
-    pelajarDBList = pRes.data;
-  } else {
-    console.error("Gagal mendapatkan senarai pelajar");
-  }
+  if (pRes && pRes.ok) pelajarDBList = pRes.data;
+  
   const mRes = await callGAS('getAllMarkah'); if (mRes?.ok) mRes.data.forEach(m => markahDB[m.nokp] = m);
   const bRes = await callGAS('getAllBiodata'); if (bRes?.ok) bRes.data.forEach(b => biodataDB[b.nokp] = b);
 }
@@ -448,7 +445,7 @@ function renderMeritDemerit() {
       </div>
       
       <div class="card hidden" id="preview-ahli-kumpulan-box">
-        <div class="card-title" style="color: var(--primary);">Senarai Ahli Kumpulan Aktif:</div>
+        <div class="card-title" style="color: var(--primary);">Senarai Ahli Kumpulan Aktif (Mata Merit/Demerit akan diagihkan kepada SEMUA ahli di bawah):</div>
         <div id="container-ahli-chips" style="margin-top: 8px;"></div>
       </div>
       <div id="action-merit-kumpulan" class="hidden">${renderKumpulanButtonsHtml()}</div>
