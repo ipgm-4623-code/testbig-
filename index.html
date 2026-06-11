@@ -178,7 +178,7 @@
       <div class="form-group"><label>Nombor Kad Pengenalan Pelajar</label><input type="text" id="auth-nokp" placeholder="cth: 030924080985"/></div>
     </div>
     <div id="auth-error" class="alert alert-danger hidden"><span>⚠</span><span id="auth-error-msg">Maklumat tidak sah</span></div>
-    <div id="auth-loading" style="display:none; text-align:center; font-size:12px; color:var(--primary); margin:8px 0;">Menghubungkan ke pangkalan data Google Sheets...</div>
+    <div id="auth-loading" style="display:none; text-align:center; font-size:12px; color:var(--primary); margin:8px 0;">Menghubungkan ke server Google Sheets...</div>
     <button class="btn btn-primary btn-block" onclick="doLogin()">Log Masuk Selamat</button>
   </div>
 </div>
@@ -200,29 +200,35 @@
 <div id="notification-bar" style="display:none" class="notification"></div>
 
 <script>
-// Pautan Kekunci API Google Apps Script Deployment Aktif Anda (Jun 2026)
+// Pautan API Google Apps Script Deployment Aktif Anda
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxudOo_cl0mBKtY3GQrCEITD1Dfv1Zv5x7wYyUOcfEdmGQUD3iie0arlSyebgJ6PLm0/exec';
 
 let currentUser = null, currentRole = null, currentScreen = null, currentPelajar = null;
 let markahDB = {}, biodataDB = {}, activeMeritTab = 'Individu';
-let pelajarDBList = []; // Array dinamik memuat turun senarai pelajar penuh dari Google Sheets
+let pelajarDBList = []; 
 
+// Fungsi GET kalis ralat CORS
 async function callGAS(action, payload = {}) {
   try {
     const params = new URLSearchParams({ action, payload: JSON.stringify(payload) });
     const resp = await fetch(GAS_URL + '?' + params.toString(), { method: 'GET', redirect: 'follow' });
     return await resp.json();
-  } catch (e) { console.error(e); return null; }
+  } catch (e) { console.error("GET Error:", e); return null; }
 }
 
+// KEMAS KINI STRUKTUR: Menggunakan JSON Plain Text untuk melepasi preflight OPTIONS check (CORS Kalis Sekat)
 async function callGASPost(action, payload = {}) {
   try {
-    const body = new FormData();
-    body.append('action', action);
-    body.append('payload', JSON.stringify(payload));
-    const resp = await fetch(GAS_URL, { method: 'POST', body, redirect: 'follow' });
+    const resp = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action, payload }),
+      redirect: 'follow'
+    });
     return await resp.json();
-  } catch (e) { console.error(e); return null; }
+  } catch (e) { 
+    console.error("POST Error:", e); 
+    return null; 
+  }
 }
 
 function switchAuthTab(tab) {
@@ -231,7 +237,6 @@ function switchAuthTab(tab) {
   document.querySelectorAll('.auth-tab').forEach((t, i) => t.classList.toggle('active', (i===0 && tab==='pensyarah') || (i===1 && tab==='pelajar')));
 }
 
-// PROSES PENGESAHAN: Data disemak terus ke Sheets di server backend (Tiada lagi pencerobohan keselamatan)
 async function doLogin() {
   const isP = !document.getElementById('auth-pensyarah-form').classList.contains('hidden');
   let payload = {};
@@ -264,7 +269,6 @@ async function doLogin() {
     currentRole = res.type;
     if (currentRole === 'pelajar') currentPelajar = res.user;
     
-    // Muat turun data dinamik pelajar serta-merta dari Google Sheets
     await loadAllDataFromServer();
     
     document.getElementById('screen-auth').classList.add('hidden');
